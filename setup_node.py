@@ -43,6 +43,7 @@ class ServerlessSetupNode:
             if not url or url.startswith("#"): return ""
             auth_header = ""
             
+            # --- УМНЫЙ ПАРСЕР CIVITAI ---
             if "civitai.com" in url:
                 if "/api/download/models/" not in url:
                     v_match = re.search(r'modelVersionId=(\d+)', url)
@@ -56,6 +57,7 @@ class ServerlessSetupNode:
                     sep = "&" if "?" in url else "?"
                     url += f"{sep}token={civitai_token}"
                     
+            # --- ТОКЕН HUGGINGFACE ---
             if "huggingface.co" in url and hf_token:
                 auth_header = f'--header="Authorization: Bearer {hf_token}"'
             
@@ -63,7 +65,7 @@ class ServerlessSetupNode:
                 out_file = out_file.strip()
                 d_name = os.path.dirname(out_file)
                 cmd = f"mkdir -p {d_name}\n"
-                cmd += f"if [ ! -f \"{out_file}\" ]; then wget {auth_header} -O \"{out_file}\" \"{url}\"; else echo \"✅ Пропускаем (уже есть): {out_file}\"; fi\n"
+                cmd += f"if [ ! -f \"{out_file}\" ]; then wget {auth_header} -O \"{out_file}\" \"{url}\"; else echo \"✅ Пропускаем (уже есть): {out_file}\\n\"; fi\n"
                 return cmd
             elif out_dir:
                 cmd = f"mkdir -p {out_dir}\n"
@@ -71,7 +73,7 @@ class ServerlessSetupNode:
                 return cmd
             return ""
 
-        # Указываем правильные пути для всех категорий (через портал /workspace/)
+        # Указываем правильные пути для всех категорий
         for link in checkpoints.split("\n"): bash_script += get_wget(link, out_dir="/workspace/ComfyUI/models/checkpoints")
         for link in diffusion_models.split("\n"): bash_script += get_wget(link, out_dir="/workspace/ComfyUI/models/diffusion_models")
         for link in vae.split("\n"): bash_script += get_wget(link, out_dir="/workspace/ComfyUI/models/vae")
@@ -102,6 +104,35 @@ class ServerlessSetupNode:
                 PromptServer.instance.send_sync("vast_log_message", {"text": line})
                 
         process.wait()
-        PromptServer.instance.send_sync("vast_log_message", {"text": "✅✅✅ ВСЕ ФАЙЛЫ ЗАГРУЖЕНЫ УСПЕШНО!\n"})
+        PromptServer.instance.send_sync("vast_log_message", {"text": "\n✅✅✅ ВСЕ ФАЙЛЫ ЗАГРУЖЕНЫ УСПЕШНО!\n"})
         
         return ("Установка завершена!",)
+
+class ServerlessBashNode:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "bash_command": ("STRING", {"multiline": True, "default": "ls -lah /workspace/ComfyUI/models/checkpoints\n# df -h (посмотреть свободное место)\n# rm -rf /workspace/ComfyUI/models/checkpoints/говно.safetensors (удалить файл)"})
+            }
+        }
+    
+    RETURN_TYPES = ("STRING",)
+    FUNCTION = "run_bash"
+    CATEGORY = "Serverless/Setup"
+    OUTPUT_NODE = True 
+
+    def run_bash(self, bash_command):
+        PromptServer.instance.send_sync("vast_log_message", {"text": f"💻 ВЫПОЛНЯЮ КОМАНДУ:\n{bash_command}\n\n"})
+        process = subprocess.Popen(bash_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        
+        for line in iter(process.stdout.readline, ''):
+            PromptServer.instance.send_sync("vast_log_message", {"text": line})
+            
+        process.wait()
+        PromptServer.instance.send_sync("vast_log_message", {"text": "\n✅ КОМАНДА ВЫПОЛНЕНА!\n"})
+        return ("Готово",)
+
+# РЕГИСТРИРУЕМ ОБЕ НОДЫ
+NODE_CLASS_MAPPINGS = {"SmartServerlessSetup": ServerlessSetupNode, "ServerlessBashNode": ServerlessBashNode}
+NODE_DISPLAY_NAME_MAPPINGS = {"SmartServerlessSetup": "🔥 Smart Serverless Setup", "ServerlessBashNode": "💻 Serverless Bash Terminal"}
