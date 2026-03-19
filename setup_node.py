@@ -1,7 +1,7 @@
 import os
 import subprocess
 import re
-from server import PromptServer  # <--- ДОБАВИЛИ ИМПОРТ ДЛЯ ОТПРАВКИ ЛОГОВ
+from server import PromptServer
 
 class ServerlessSetupNode:
     @classmethod
@@ -10,7 +10,7 @@ class ServerlessSetupNode:
             "required": {
                 "civitai_token": ("STRING", {"default": ""}),
                 "hf_token": ("STRING", {"default": ""}),
-                "pip_libs": ("STRING", {"multiline": True, "default": "onnxruntime\nmediapipe\nultralytics\ninsightface"}),
+                "pip_libs": ("STRING", {"multiline": True, "default": "onnxruntime\nmediapipe\nultralytics\ninsightface\ngit+https://github.com/huggingface/diffusers"}),
                 "checkpoints": ("STRING", {"multiline": True, "default": ""}),
                 "diffusion_models": ("STRING", {"multiline": True, "default": ""}),
                 "vae": ("STRING", {"multiline": True, "default": ""}),
@@ -18,7 +18,7 @@ class ServerlessSetupNode:
                 "text_encoders": ("STRING", {"multiline": True, "default": ""}),
                 "loras": ("STRING", {"multiline": True, "default": ""}),
                 "controlnets": ("STRING", {"multiline": True, "default": ""}),
-                "custom_downloads": ("STRING", {"multiline": True, "default": "# ФОРМАТ: ССЫЛКА | ПОЛНЫЙ_ПУТЬ_К_ФАЙЛУ\n"})
+                "custom_downloads": ("STRING", {"multiline": True, "default": "# ФОРМАТ: ССЫЛКА | ПОЛНЫЙ_ПУТЬ_К_ФАЙЛУ\n# https://huggingface.co/sam/sam3.pt | /workspace/ComfyUI/models/sams/sam3.pt\n"})
             }
         }
     
@@ -31,11 +31,12 @@ class ServerlessSetupNode:
         PromptServer.instance.send_sync("vast_log_message", {"text": "🔥 Формируем скрипт закачки...\n"})
         
         bash_script = "#!/bin/bash\n"
-        bash_script += "mkdir -p /ComfyUI/models/my_libs\n"
+        # Устанавливаем библиотеки ПРЯМО НА ВЕЧНЫЙ ДИСК (через портал)
+        bash_script += "mkdir -p /workspace/ComfyUI/models/my_libs\n"
         
         libs = " ".join([l.strip() for l in pip_libs.split("\n") if l.strip()])
         if libs:
-            bash_script += f"pip install --target /ComfyUI/models/my_libs {libs}\n"
+            bash_script += f"pip install --target /workspace/ComfyUI/models/my_libs {libs}\n"
         
         def get_wget(url, out_dir=None, out_file=None):
             url = url.strip()
@@ -70,13 +71,14 @@ class ServerlessSetupNode:
                 return cmd
             return ""
 
-        for link in checkpoints.split("\n"): bash_script += get_wget(link, out_dir="/ComfyUI/models/checkpoints")
-        for link in diffusion_models.split("\n"): bash_script += get_wget(link, out_dir="/ComfyUI/models/diffusion_models")
-        for link in vae.split("\n"): bash_script += get_wget(link, out_dir="/ComfyUI/models/vae")
-        for link in clip.split("\n"): bash_script += get_wget(link, out_dir="/ComfyUI/models/clip")
-        for link in text_encoders.split("\n"): bash_script += get_wget(link, out_dir="/ComfyUI/models/text_encoders")
-        for link in loras.split("\n"): bash_script += get_wget(link, out_dir="/ComfyUI/models/loras")
-        for link in controlnets.split("\n"): bash_script += get_wget(link, out_dir="/ComfyUI/models/controlnet")
+        # Указываем правильные пути для всех категорий (через портал /workspace/)
+        for link in checkpoints.split("\n"): bash_script += get_wget(link, out_dir="/workspace/ComfyUI/models/checkpoints")
+        for link in diffusion_models.split("\n"): bash_script += get_wget(link, out_dir="/workspace/ComfyUI/models/diffusion_models")
+        for link in vae.split("\n"): bash_script += get_wget(link, out_dir="/workspace/ComfyUI/models/vae")
+        for link in clip.split("\n"): bash_script += get_wget(link, out_dir="/workspace/ComfyUI/models/clip")
+        for link in text_encoders.split("\n"): bash_script += get_wget(link, out_dir="/workspace/ComfyUI/models/text_encoders")
+        for link in loras.split("\n"): bash_script += get_wget(link, out_dir="/workspace/ComfyUI/models/loras")
+        for link in controlnets.split("\n"): bash_script += get_wget(link, out_dir="/workspace/ComfyUI/models/controlnet")
             
         for line in custom_downloads.split("\n"):
             if "|" in line and not line.strip().startswith("#"):
@@ -87,21 +89,19 @@ class ServerlessSetupNode:
         with open("/tmp/smart_setup.sh", "w") as f:
             f.write(bash_script)
         
-        log_path = "/ComfyUI/models/setup_log.txt"
+        log_path = "/workspace/ComfyUI/models/setup_log.txt"
         PromptServer.instance.send_sync("vast_log_message", {"text": f"🚀 НАЧИНАЮ СКАЧИВАНИЕ! Лог также пишется в {log_path}\n"})
         
-        # МАГИЯ РИЛТАЙМ ЛОГОВ: Читаем вывод консоли по одной строчке и шлем тебе в туннель
         process = subprocess.Popen(["bash", "/tmp/smart_setup.sh"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
         
         with open(log_path, "w", encoding="utf-8") as log_file:
             for line in iter(process.stdout.readline, ''):
-                print(line, end="") # Пишем на сервере
+                print(line, end="") 
                 log_file.write(line)
                 log_file.flush()
-                # Шлем строчку в браузер!
                 PromptServer.instance.send_sync("vast_log_message", {"text": line})
                 
         process.wait()
         PromptServer.instance.send_sync("vast_log_message", {"text": "✅✅✅ ВСЕ ФАЙЛЫ ЗАГРУЖЕНЫ УСПЕШНО!\n"})
         
-        return ("Установка завершена! Проверь терминал.",)
+        return ("Установка завершена!",)
