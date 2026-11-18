@@ -1,0 +1,19 @@
+name: build-worker-image
+on:
+  push:
+    branches: [ comfyui-image ]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login to Docker Hub
+        env:
+          DH_USER: ${{ secrets.DOCKER_USER }}
+          DH_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+        run: echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin
+      - name: Build image
+        run: docker build --pull -t docker.io/sexygoldman/comfyui-bridge-worker:latest -f Dockerfile .
+      - name: Push image
+        run: docker push docker.io/sexygoldman/comfyui-bridge-worker:latest
