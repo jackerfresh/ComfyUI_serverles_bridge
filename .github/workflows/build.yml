@@ -14,6 +14,6 @@ jobs:
           DH_TOKEN: ${{ secrets.DOCKER_TOKEN }}
         run: echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin
       - name: Build image
-        run: docker build --pull -t docker.io/sexygoldman/comfyui-bridge-worker:latest -f Dockerfile .
+        run: docker build --pull -t docker.io/sexygoldman/comfyui-bridge-worker:tiny -f Dockerfile .
       - name: Push image
-        run: docker push docker.io/sexygoldman/comfyui-bridge-worker:latest
+        run: docker push docker.io/sexygoldman/comfyui-bridge-worker:tiny
